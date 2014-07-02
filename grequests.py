@@ -153,7 +153,7 @@ def imap(requests, stream=False, size=2, retries=0):
     if retries and to_retry:
         while retries > 0 and to_retry:
             retries -= 1
-            to_retry = []
+            new_retry = []
             for request in pool.imap_unordered(send, to_retry):
                 if request.response:
                     yield request.response
@@ -162,6 +162,7 @@ def imap(requests, stream=False, size=2, retries=0):
                         yield request
                     else:
                         to_retry.append(request)
+            to_retry = new_retry
 
 
     pool.join()
