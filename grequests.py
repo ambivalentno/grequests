@@ -125,7 +125,7 @@ def map(requests, stream=False, size=None, exception_handler=None):
     return ret
 
 
-def imap(requests, stream=False, size=2, exception_handler=None):
+def imap(requests, stream=False, size=2, retries=0):
     """Concurrently converts a generator object of Requests to
     a generator of Responses.
 
@@ -136,6 +136,7 @@ def imap(requests, stream=False, size=2, exception_handler=None):
     """
 
     pool = Pool(size)
+    to_retry = []
 
     def send(r):
         return r.send(stream=stream)
@@ -143,9 +144,24 @@ def imap(requests, stream=False, size=2, exception_handler=None):
     for request in pool.imap_unordered(send, requests):
         if request.response:
             yield request.response
-        elif exception_handler:
-            yield exception_handler(request, request.exception)
         else:
-            yield request
+            if not retries:
+                yield request
+            else:
+                to_retry.append(request)
+
+    if retries and to_retry:
+        while retries > 0 and to_retry:
+            retries -= 1
+            to_retry = []
+            for request in pool.imap_unordered(send, to_retry):
+                if request.response:
+                    yield request.response
+                else:
+                    if not retries:
+                        yield request
+                    else:
+                        to_retry.append(request)
+
 
     pool.join()
