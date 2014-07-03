@@ -132,37 +132,29 @@ def imap(requests, stream=False, size=2, retries=0):
     :param requests: a generator of Request objects.
     :param stream: If True, the content will not be downloaded immediately.
     :param size: Specifies the number of requests to make at a time. default is 2
-    :param exception_handler: Callback function, called when exception occured. Params: Request, Exception
+    :param retries: Specifies the number of reties to do. default is 0
+    # :param exception_handler: Callback function, called when exception occured. Params: Request, Exception
     """
 
     pool = Pool(size)
-    to_retry = []
+    # we have to have understandable args. This increment is for while condition
+    retries += 1
 
     def send(r):
         return r.send(stream=stream)
 
-    for request in pool.imap_unordered(send, requests):
-        if request.response:
-            yield request.response
-        else:
-            if not retries:
-                yield request
+    while retries > 0 and requests:
+        retries -= 1
+        to_retry = []
+
+        for request in pool.imap_unordered(send, requests):
+            if request.response:
+                yield request.response
             else:
-                to_retry.append(request)
-
-    if retries and to_retry:
-        while retries > 0 and to_retry:
-            retries -= 1
-            new_retry = []
-            for request in pool.imap_unordered(send, to_retry):
-                if request.response:
-                    yield request.response
+                if not retries:
+                    yield request
                 else:
-                    if not retries:
-                        yield request
-                    else:
-                        to_retry.append(request)
-            to_retry = new_retry
-
+                    to_retry.append(request)
+        requests = to_retry
 
     pool.join()
